@@ -28,7 +28,13 @@
 
     // connectButton.addEventListener("click", connectPeers, false);
     // disconnectButton.addEventListener("click", disconnectPeers, false);
-    sendButton.addEventListener("click", sendMessage, false);
+    messageInputBox.addEventListener(
+      "keypress",
+      (e) => {
+        if (e.key === "Enter") sendMessage(e);
+      },
+      false
+    );
 
     connectPeers();
   }
@@ -41,6 +47,13 @@
     // Create the local connection and its event listeners
 
     window.localConnection = new RTCPeerConnection();
+
+    window.setAnswer = ({ answer, candidate }) => {
+      localConnection
+        .setRemoteDescription(answer)
+        .then(() => localConnection.addIceCandidate(candidate))
+        .catch(handleAddCandidateError);
+    };
     let once = true;
 
     // Create the data channel and establish its event listeners
@@ -62,7 +75,7 @@
     // Now create an offer to connect; this starts the process
 
     if (opener) {
-      // 2. Window
+      // 2. Tab
 
       opener.offerCreated
         .then((offer) => localConnection.setRemoteDescription(offer))
@@ -71,27 +84,16 @@
           localConnection.setLocalDescription(answer).then(() => answer)
         )
         .then((answer) => {
-          localConnection.onicecandidate = (e) => {
-            if (e.candidate && once) {
+          localConnection.onicecandidate = ({ candidate }) => {
+            if (candidate && once) {
               once = false;
-              console.log(
-                "ice candidate",
-                opener.localConnection.remoteDescription
-              );
-
-              opener.localConnection.setRemoteDescription(answer).then(() => {
-                //  setTimeout(() => {
-                opener.localConnection
-                  .addIceCandidate(e.candidate)
-                  .catch(handleAddCandidateError);
-                //  }, 1000);
-              });
+              opener.setAnswer({ answer, candidate });
             }
           };
         })
         .catch(handleCreateDescriptionError);
     } else {
-      // 1. Window
+      // 1. Tab
 
       window.offerCreated = localConnection
         .createOffer()
@@ -155,11 +157,13 @@
       if (state === "open") {
         messageInputBox.disabled = false;
         messageInputBox.focus();
+        messageInputBox.style.borderBottomColor = "green";
         sendButton.disabled = false;
         disconnectButton.disabled = false;
         connectButton.disabled = true;
       } else {
         messageInputBox.disabled = true;
+        messageInputBox.style.borderBottomColor = "red";
         sendButton.disabled = true;
         connectButton.disabled = false;
         disconnectButton.disabled = true;
