@@ -1,5 +1,3 @@
-//import qrcode from "https://jspm.dev/qrcode-generator@1.4.4";
-
 (function () {
   // Define "global" variables
 
@@ -15,23 +13,6 @@
   var sendChannel = null; // RTCDataChannel for the local (sender)
   var receiveChannel = null; // RTCDataChannel for the remote (receiver)
 
-  const createQR = (data, prefix) => {
-    const d = `${window.location.origin}?${prefix}=${encodeURI(
-      JSON.stringify(data)
-    )}`;
-    // autodetect
-    var typeNumber = 0;
-    var errorCorrectionLevel = "L";
-    // var qr =  qrcode(typeNumber, errorCorrectionLevel);
-    // qr.addData(d);
-    // qr.make();
-    const a = document.createElement("a");
-    a.href = d;
-    a.target = "_blank";
-    a.innerHTML = "click"; //qr.createImgTag();
-    document.getElementById("placeholder").appendChild(a);
-  };
-
   // Functions
 
   // Set things up, connect event listeners, etc.
@@ -46,7 +27,7 @@
     // Set event listeners for user interface widgets
 
     // connectButton.addEventListener("click", connectPeers, false);
-    disconnectButton.addEventListener("click", disconnectPeers, false);
+    // disconnectButton.addEventListener("click", disconnectPeers, false);
     sendButton.addEventListener("click", sendMessage, false);
 
     connectPeers();
@@ -58,20 +39,9 @@
 
   function connectPeers() {
     // Create the local connection and its event listeners
-    // if (window.location.search.startsWith("?answer=")) {
-    //   const o = JSON.parse(
-    //     decodeURI(window.location.search.replace("?answer=", ""))
-    //   );
 
-    //   localConnection = Object.assign(new RTCPeerConnection(), o.connection);
-    //   console.log(localConnection);
-    // } else {
-
-    // }
-
-    localConnection = new RTCPeerConnection();
-
-    console.log("spd", localConnection);
+    window.localConnection = new RTCPeerConnection();
+    let once = true;
 
     // Create the data channel and establish its event listeners
     sendChannel = localConnection.createDataChannel("sendChannel");
@@ -80,77 +50,54 @@
 
     // Create the remote connection and its event listeners
 
-    remoteConnection = new RTCPeerConnection();
-    remoteConnection.ondatachannel = receiveChannelCallback;
+    //remoteConnection = new RTCPeerConnection();
+    localConnection.ondatachannel = receiveChannelCallback;
 
     // Set up the ICE candidates for the two peers
 
-    localConnection.onicecandidate = (e) => {
-      if (e.candidate) {
-        console.log("candidate:", e.candidate);
-        remoteConnection
-          .addIceCandidate(e.candidate)
-          .catch(handleAddCandidateError);
-      }
-    };
-
-    remoteConnection.onicecandidate = (e) => {
-      if (e.candidate) {
-        console.log("candidate:", e.candidate);
-        localConnection
-          .addIceCandidate(e.candidate)
-          .catch(handleAddCandidateError);
-      }
-    };
+    // remoteConnection.onicecandidate = e => !e.candidate
+    //     || localConnection.addIceCandidate(e.candidate)
+    //     .catch(handleAddCandidateError);
 
     // Now create an offer to connect; this starts the process
-    if (window.location.search.startsWith("?offer=")) {
-      const o = JSON.parse(
-        decodeURI(window.location.search.replace("?offer=", ""))
-      );
 
-      remoteConnection.setRemoteDescription(o.offer);
+    if (opener) {
+      // 2. Window
 
-      remoteConnection.createAnswer().then((answer) => {
-        // console.log("answer:", answer);
-        remoteConnection.setLocalDescription(answer);
-        opener.localConnection.setRemoteDescription(answer);
-        opener.console.log("test");
-        // createQR(
-        //   {
-        //     connection: o.connection,
-        //     offer: o.offer,
-        //     answer,
-        //   },
-        //   "answer"
-        // );
-      });
-    } else if (window.location.search.startsWith("?answer=")) {
-      const o = JSON.parse(
-        decodeURI(window.location.search.replace("?answer=", ""))
-      );
+      opener.offerCreated
+        .then((offer) => localConnection.setRemoteDescription(offer))
+        .then(() => localConnection.createAnswer())
+        .then((answer) =>
+          localConnection.setLocalDescription(answer).then(() => answer)
+        )
+        .then((answer) => {
+          localConnection.onicecandidate = (e) => {
+            if (e.candidate && once) {
+              once = false;
+              console.log(
+                "ice candidate",
+                opener.localConnection.remoteDescription
+              );
 
-      localConnection
-        .setLocalDescription(o.offer)
-        .then(() => localConnection.setRemoteDescription(o.answer));
-    } else {
-      localConnection
-        .createOffer()
-        .then((offer) => {
-          // console.log("offer:", offer);
-          localConnection.setLocalDescription(offer);
-          createQR(
-            {
-              connection: localConnection,
-              offer,
-              // remoteConnection: localConnection.localDescription,
-              // candidate: e.candidate,
-            },
-            "offer"
-          );
+              opener.localConnection.setRemoteDescription(answer).then(() => {
+                //  setTimeout(() => {
+                opener.localConnection
+                  .addIceCandidate(e.candidate)
+                  .catch(handleAddCandidateError);
+                //  }, 1000);
+              });
+            }
+          };
         })
-
         .catch(handleCreateDescriptionError);
+    } else {
+      // 1. Window
+
+      window.offerCreated = localConnection
+        .createOffer()
+        .then((offer) =>
+          localConnection.setLocalDescription(offer).then(() => offer)
+        );
     }
   }
 
@@ -275,16 +222,12 @@
 
     // Update user interface elements
 
-    try {
-      connectButton.disabled = false;
-      disconnectButton.disabled = true;
-      sendButton.disabled = true;
+    connectButton.disabled = false;
+    disconnectButton.disabled = true;
+    sendButton.disabled = true;
 
-      messageInputBox.value = "";
-      messageInputBox.disabled = true;
-    } catch (e) {
-      console.warn(e);
-    }
+    messageInputBox.value = "";
+    messageInputBox.disabled = true;
   }
 
   // Set up an event listener which will run the startup
