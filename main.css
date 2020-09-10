@@ -13,23 +13,3 @@ input {
   outline: none;
   border-bottom: 1px solid red;
 }
-
-.messagebox {
-  border: 1px solid black;
-  padding: 5px;
-  width: 450px;
-}
-
-.buttonright {
-  float: right;
-}
-
-.buttonleft {
-  float: left;
-}
-
-.controlbox {
-  padding: 5px;
-  width: 450px;
-  height: 28px;
-}

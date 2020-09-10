@@ -1,241 +1,146 @@
-(function () {
-  // Define "global" variables
+const messageInputBox = document.getElementById("message");
+const receiveBox = document.getElementById("receivebox");
 
-  var connectButton = null;
-  var disconnectButton = null;
-  var sendButton = null;
-  var messageInputBox = null;
-  var receiveBox = null;
+// Functions
 
-  window.localConnection = null; // RTCPeerConnection for our "local" connection
-  var remoteConnection = null; // RTCPeerConnection for the "remote"
+// Set things up, connect event listeners, etc.
 
-  var sendChannel = null; // RTCDataChannel for the local (sender)
-  var receiveChannel = null; // RTCDataChannel for the remote (receiver)
+messageInputBox.addEventListener(
+  "keypress",
+  (e) => {
+    if (e.key === "Enter") sendMessage(e);
+  },
+  false
+);
 
-  // Functions
+// Connect the two peers. Normally you look for and connect to a remote
+// machine here, but we're just connecting two local objects, so we can
+// bypass that step.
 
-  // Set things up, connect event listeners, etc.
+// Create the local connection and its event listeners
 
-  function startup() {
-    connectButton = document.getElementById("connectButton");
-    disconnectButton = document.getElementById("disconnectButton");
-    sendButton = document.getElementById("sendButton");
-    messageInputBox = document.getElementById("message");
-    receiveBox = document.getElementById("receivebox");
+const localConnection = new RTCPeerConnection();
 
-    // Set event listeners for user interface widgets
+window.setAnswer = ({ answer, candidate }) => {
+  localConnection
+    .setRemoteDescription(answer)
+    .then(() => localConnection.addIceCandidate(candidate))
+    .catch(console.error);
+};
+let once = true;
 
-    // connectButton.addEventListener("click", connectPeers, false);
-    // disconnectButton.addEventListener("click", disconnectPeers, false);
-    messageInputBox.addEventListener(
-      "keypress",
-      (e) => {
-        if (e.key === "Enter") sendMessage(e);
-      },
-      false
-    );
+// Create the data channel and establish its event listeners
+const sendChannel = localConnection.createDataChannel("sendChannel");
+sendChannel.onopen = handleSendChannelStatusChange;
+sendChannel.onclose = handleSendChannelStatusChange;
 
-    connectPeers();
-  }
+let receiveChannel;
 
-  // Connect the two peers. Normally you look for and connect to a remote
-  // machine here, but we're just connecting two local objects, so we can
-  // bypass that step.
-
-  function connectPeers() {
-    // Create the local connection and its event listeners
-
-    window.localConnection = new RTCPeerConnection();
-
-    window.setAnswer = ({ answer, candidate }) => {
-      localConnection
-        .setRemoteDescription(answer)
-        .then(() => localConnection.addIceCandidate(candidate))
-        .catch(handleAddCandidateError);
-    };
-    let once = true;
-
-    // Create the data channel and establish its event listeners
-    sendChannel = localConnection.createDataChannel("sendChannel");
-    sendChannel.onopen = handleSendChannelStatusChange;
-    sendChannel.onclose = handleSendChannelStatusChange;
-
-    // Create the remote connection and its event listeners
-
-    //remoteConnection = new RTCPeerConnection();
-    localConnection.ondatachannel = receiveChannelCallback;
-
-    // Set up the ICE candidates for the two peers
-
-    // remoteConnection.onicecandidate = e => !e.candidate
-    //     || localConnection.addIceCandidate(e.candidate)
-    //     .catch(handleAddCandidateError);
-
-    // Now create an offer to connect; this starts the process
-
-    if (opener) {
-      // 2. Tab
-
-      opener.offerCreated
-        .then((offer) => localConnection.setRemoteDescription(offer))
-        .then(() => localConnection.createAnswer())
-        .then((answer) =>
-          localConnection.setLocalDescription(answer).then(() => answer)
-        )
-        .then((answer) => {
-          localConnection.onicecandidate = ({ candidate }) => {
-            if (candidate && once) {
-              once = false;
-              opener.setAnswer({ answer, candidate });
-            }
-          };
-        })
-        .catch(handleCreateDescriptionError);
-    } else {
-      // 1. Tab
-
-      window.offerCreated = localConnection
-        .createOffer()
-        .then((offer) =>
-          localConnection.setLocalDescription(offer).then(() => offer)
-        );
-    }
-  }
-
-  // Handle errors attempting to create a description;
-  // this can happen both when creating an offer and when
-  // creating an answer. In this simple example, we handle
-  // both the same way.
-
-  function handleCreateDescriptionError(error) {
-    console.log("Unable to create an offer: " + error.toString());
-  }
-
-  // Handle successful addition of the ICE candidate
-  // on the "local" end of the connection.
-
-  function handleLocalAddCandidateSuccess() {
-    connectButton.disabled = true;
-  }
-
-  // Handle successful addition of the ICE candidate
-  // on the "remote" end of the connection.
-
-  function handleRemoteAddCandidateSuccess() {
-    disconnectButton.disabled = false;
-  }
-
-  // Handle an error that occurs during addition of ICE candidate.
-
-  function handleAddCandidateError() {
-    console.log("Oh noes! addICECandidate failed!");
-  }
-
-  // Handles clicks on the "Send" button by transmitting
-  // a message to the remote peer.
-
-  function sendMessage() {
-    var message = messageInputBox.value;
-    sendChannel.send(message);
-
-    // Clear the input box and re-focus it, so that we're
-    // ready for the next message.
-
-    messageInputBox.value = "";
-    messageInputBox.focus();
-  }
-
-  // Handle status changes on the local end of the data
-  // channel; this is the end doing the sending of data
-  // in this example.
-
-  function handleSendChannelStatusChange(event) {
-    if (sendChannel) {
-      var state = sendChannel.readyState;
-
-      if (state === "open") {
-        messageInputBox.disabled = false;
-        messageInputBox.focus();
-        messageInputBox.style.borderBottomColor = "green";
-        sendButton.disabled = false;
-        disconnectButton.disabled = false;
-        connectButton.disabled = true;
-      } else {
-        messageInputBox.disabled = true;
-        messageInputBox.style.borderBottomColor = "red";
-        sendButton.disabled = true;
-        connectButton.disabled = false;
-        disconnectButton.disabled = true;
-      }
-    }
-  }
-
-  // Called when the connection opens and the data
+localConnection.ondatachannel = // Called when the connection opens and the data
   // channel is ready to be connected to the remote.
 
-  function receiveChannelCallback(event) {
+  (event) => {
     receiveChannel = event.channel;
     receiveChannel.onmessage = handleReceiveMessage;
     receiveChannel.onopen = handleReceiveChannelStatusChange;
     receiveChannel.onclose = handleReceiveChannelStatusChange;
-  }
+  };
 
-  // Handle onmessage events for the receiving channel.
-  // These are the data messages sent by the sending channel.
+if (opener) {
+  // 2. Tab
 
-  function handleReceiveMessage(event) {
-    var el = document.createElement("p");
-    var txtNode = document.createTextNode(event.data);
+  opener.offerCreated
+    .then((offer) => localConnection.setRemoteDescription(offer))
+    .then(() => localConnection.createAnswer())
+    .then((answer) =>
+      localConnection.setLocalDescription(answer).then(() => answer)
+    )
+    .then((answer) => {
+      localConnection.onicecandidate = ({ candidate }) => {
+        if (candidate && once) {
+          once = false;
+          opener.setAnswer({ answer, candidate });
+        }
+      };
+    })
+    .catch(console.error);
+} else {
+  // 1. Tab
 
-    el.appendChild(txtNode);
-    receiveBox.appendChild(el);
-  }
+  window.offerCreated = localConnection
+    .createOffer()
+    .then((offer) =>
+      localConnection.setLocalDescription(offer).then(() => offer)
+    );
+}
 
-  // Handle status changes on the receiver's channel.
+// Handles clicks on the "Send" button by transmitting
+// a message to the remote peer.
 
-  function handleReceiveChannelStatusChange(event) {
-    if (receiveChannel) {
-      console.log(
-        "Receive channel's status has changed to " + receiveChannel.readyState
-      );
+function sendMessage() {
+  var message = messageInputBox.value;
+  sendChannel.send(message);
+
+  // Clear the input box and re-focus it, so that we're
+  // ready for the next message.
+
+  messageInputBox.value = "";
+  messageInputBox.focus();
+}
+
+// Handle status changes on the local end of the data
+// channel; this is the end doing the sending of data
+// in this example.
+
+function handleSendChannelStatusChange(event) {
+  if (sendChannel) {
+    var state = sendChannel.readyState;
+
+    if (state === "open") {
+      messageInputBox.disabled = false;
+      messageInputBox.focus();
+      messageInputBox.style.borderBottomColor = "green";
+    } else {
+      messageInputBox.disabled = true;
+      messageInputBox.style.borderBottomColor = "red";
     }
+  }
+}
 
-    // Here you would do stuff that needs to be done
-    // when the channel's status changes.
+// Handle onmessage events for the receiving channel.
+// These are the data messages sent by the sending channel.
+
+function handleReceiveMessage(event) {
+  var el = document.createElement("p");
+  var txtNode = document.createTextNode(event.data);
+
+  el.appendChild(txtNode);
+  receiveBox.appendChild(el);
+}
+
+// Handle status changes on the receiver's channel.
+
+function handleReceiveChannelStatusChange(event) {
+  if (receiveChannel) {
+    console.log(
+      "Receive channel's status has changed to " + receiveChannel.readyState
+    );
   }
 
-  // Close the connection, including data channels if they're open.
-  // Also update the UI to reflect the disconnected status.
+  // Here you would do stuff that needs to be done
+  // when the channel's status changes.
+}
 
-  function disconnectPeers() {
-    // Close the RTCDataChannels if they're open.
+// Close the connection, including data channels if they're open.
+// Also update the UI to reflect the disconnected status.
 
-    sendChannel.close();
-    receiveChannel.close();
+function disconnectPeers() {
+  // Close the RTCDataChannels if they're open.
 
-    // Close the RTCPeerConnections
+  sendChannel.close();
+  receiveChannel.close();
 
-    localConnection.close();
-    remoteConnection.close();
+  // Close the RTCPeerConnections
 
-    sendChannel = null;
-    receiveChannel = null;
-    localConnection = null;
-    remoteConnection = null;
-
-    // Update user interface elements
-
-    connectButton.disabled = false;
-    disconnectButton.disabled = true;
-    sendButton.disabled = true;
-
-    messageInputBox.value = "";
-    messageInputBox.disabled = true;
-  }
-
-  // Set up an event listener which will run the startup
-  // function once the page is done loading.
-
-  window.addEventListener("load", startup, false);
-})();
+  localConnection.close();
+}
