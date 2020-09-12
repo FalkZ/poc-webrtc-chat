@@ -1,3 +1,7 @@
+// import { default as t } from "https://jspm.dev/esserializer";
+
+// const { serialize, deserialize } = t;
+
 const messageInputBox = document.getElementById("message");
 const receiveBox = document.getElementById("receivebox");
 
@@ -22,10 +26,26 @@ messageInputBox.addEventListener(
 const localConnection = new RTCPeerConnection();
 
 window.setAnswer = ({ answer, candidate }) => {
+  const o = {
+    answer,
+    offer: localConnection.localDescription,
+    candidate,
+  };
+  // console.log(JSON.stringify(JSON.stringify(o)), o);
   localConnection
     .setRemoteDescription(answer)
     .then(() => localConnection.addIceCandidate(candidate))
+    .then(() =>
+      console.log(JSON.stringify(JSON.stringify(o)), o, localConnection)
+    )
     .catch(console.error);
+};
+
+window.applyConfig = (str) => {
+  const { offer, answer, candidate } = JSON.parse(str);
+  localConnection.setLocalDescription(offer);
+  localConnection.setRemoteDescription(answer);
+  localConnection.addIceCandidate(candidate);
 };
 let once = true;
 
